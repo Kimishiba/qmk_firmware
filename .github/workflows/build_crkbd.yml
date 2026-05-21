@@ -20,7 +20,7 @@ on:
     branches:
       - master
     paths:
-      - 'keyboards/crkbd/keymaps/default/**'
+      - 'keyboards/sofle/keymaps/default/**'
       - '.github/workflows/build_crkbd.yml'
   workflow_dispatch:   # lets you trigger a build manually from the Actions tab
 
@@ -45,13 +45,13 @@ jobs:
       - name: Configure QMK to use this repo
         run: qmk setup -H "$GITHUB_WORKSPACE" -y
 
-      - name: Compile crkbd default keymap
-        run: qmk compile -kb crkbd -km default -e MOUSEKEY_ENABLE=yes
+      - name: Compile sofle default keymap
+        run: qmk compile -kb sofle -km default -e MOUSEKEY_ENABLE=yes
 
       - name: Upload firmware as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crkbd-default-firmware
+          name: sofle-default-firmware
           path: |
             *.hex
             *.uf2
