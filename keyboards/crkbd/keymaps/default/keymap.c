@@ -5,39 +5,43 @@
 #include QMK_KEYBOARD_H
 
 // ─── Mouse Jiggler ────────────────────────────────────────────────────────────
-// Custom keycode for the toggle macro.
-// Assign MJ_TOGL to any key on any layer (suggested: Layer 3, top-right corner).
+// Toggle with MJ_TOGL (Layer 3, top-right key — hold Lower + Raise, tap P).
+//
+// When active: taps Right Shift once every 60 seconds.
+// Right Shift alone does not type anything, but counts as keyboard activity —
+// enough to prevent screen lock and reset away-status in Teams / Slack / etc.
+//
+// No MOUSEKEY_ENABLE required.
+// ─────────────────────────────────────────────────────────────────────────────
+
 enum custom_keycodes {
     MJ_TOGL = SAFE_RANGE,
 };
 
-bool mouse_jiggle_mode = false;
+bool     mouse_jiggle_mode = false;
+uint32_t jiggle_timer      = 0;
 
-// Toggle jiggle mode on key press; ignore key release.
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case MJ_TOGL:
             if (record->event.pressed) {
                 mouse_jiggle_mode = !mouse_jiggle_mode;
+                jiggle_timer = timer_read32();   // reset timer on every toggle
             }
             break;
     }
     return true;
 }
 
-// matrix_scan_user runs in a tight loop. When jiggle mode is on it moves the
-// mouse cursor by 1px in each direction every ~40 seconds, which is invisible
-// during normal use but enough to prevent sleep / away-status.
 void matrix_scan_user(void) {
     if (mouse_jiggle_mode) {
-        SEND_STRING(SS_DELAY(10000));  // wait 10 s
-        tap_code(KC_MS_UP);
-        tap_code(KC_MS_DOWN);
-        SEND_STRING(SS_DELAY(30000));  // wait 30 s
-        tap_code(KC_MS_LEFT);
-        tap_code(KC_MS_RIGHT);
+        if (timer_elapsed32(jiggle_timer) > 60000) {   // every 60 seconds
+            tap_code(KC_RSFT);                          // tap Right Shift (no visible effect)
+            jiggle_timer = timer_read32();
+        }
     }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -82,9 +86,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
 
   // Layer 3 – Adjust (Lower + Raise simultaneously)
-  // MJ_TOGL is on the top-right key — hold Lower, hold Raise, then tap P.
-  // RGB keys have been removed: enable RGBLIGHT_ENABLE or RGB_MATRIX_ENABLE
-  // in rules.mk and add them back here once your RGB setup is confirmed.
+  // MJ_TOGL = top-right key on right half (same position as P on layer 0)
   [3] = LAYOUT_split_3x6_3(
   //,-----------------------------------------------------.                    ,-----------------------------------------------------.
       QK_BOOT, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, MJ_TOGL,
