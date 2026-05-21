@@ -1,0 +1,58 @@
+# GitHub Actions workflow — compiles your crkbd default keymap
+# and makes the firmware available as a downloadable file.
+#
+# HOW TO UPLOAD THIS FILE:
+#   Path in your repo: .github/workflows/build_crkbd.yml
+#   (the .github folder already exists in your fork)
+#
+# WHEN DOES IT RUN:
+#   - Automatically whenever you push a change to the crkbd default keymap
+#   - Manually at any time from the Actions tab on GitHub
+#
+# WHERE TO FIND THE COMPILED FIRMWARE:
+#   GitHub → your repo → Actions tab → click the latest run → "Artifacts" section
+#   Download "crkbd-default-firmware" → unzip → flash the .hex file
+
+name: Build crkbd default firmware
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'keyboards/crkbd/keymaps/default/**'
+      - '.github/workflows/build_crkbd.yml'
+  workflow_dispatch:   # lets you trigger a build manually from the Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive   # QMK uses git submodules for libraries
+
+      - name: Install AVR toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gcc-avr avr-libc binutils-avr
+
+      - name: Install QMK CLI
+        run: pip3 install qmk
+
+      - name: Configure QMK to use this repo
+        run: qmk setup -H "$GITHUB_WORKSPACE" -y
+
+      - name: Compile crkbd default keymap
+        run: qmk compile -kb crkbd -km default
+
+      - name: Upload firmware as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crkbd-default-firmware
+          path: |
+            *.hex
+            *.uf2
+          if-no-files-found: error
