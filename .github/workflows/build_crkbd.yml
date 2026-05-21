@@ -46,7 +46,7 @@ jobs:
         run: qmk setup -H "$GITHUB_WORKSPACE" -y
 
       - name: Compile crkbd default keymap
-        run: qmk compile -kb crkbd -km default
+        run: qmk compile -kb crkbd -km default -e MOUSEKEY_ENABLE=yes
 
       - name: Upload firmware as artifact
         uses: actions/upload-artifact@v4
