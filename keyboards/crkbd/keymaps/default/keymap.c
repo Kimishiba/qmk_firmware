@@ -3,7 +3,6 @@
 //   keyboards/crkbd/keymaps/default/keymap.c
 
 #include QMK_KEYBOARD_H
-#include "crkbd.h"
 #include "quantum.h"
 #include <stdlib.h>
 
@@ -19,7 +18,7 @@
  * - Uses Left Shift (harmless in most situations).
  * - Intervals are randomized for realism (and to avoid detection).
  *
- * ──────────────────────────────────────────────────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────
  */
 #define MS_TEAMS_DEFAULT      240000   // 240 seconds (4 minutes)
 #define MS_TEAMS_MIN_RATIO    0.5      // 50% minimum interval (120 seconds)
@@ -61,7 +60,7 @@ void housekeeping_task_user(void) {
         keep_alive_timer = now;
     }
 }
-// ──────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────
 
 // ──────────────────────── KEYMAP DEFINITION BELOW ────────────────────────
 
