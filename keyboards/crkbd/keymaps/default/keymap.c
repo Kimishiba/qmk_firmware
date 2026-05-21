@@ -13,7 +13,51 @@
 //
 // No MOUSEKEY_ENABLE required.
 // ─────────────────────────────────────────────────────────────────────────────
+#include "crkbd.h"
+#include "quantum.h"
+#include <stdlib.h>
 
+static uint32_t last_activity_timer = 0;
+static uint32_t keep_alive_timer = 0;
+static uint32_t keep_alive_delay = 0;
+
+#define MS_TEAMS_DEFAULT 240000  // 240 seconds (4 minutes)
+#define MS_TEAMS_MIN_RATIO 0.5   // Minimum: 50% of default (120 seconds)
+#define INACTIVITY_THRESHOLD 60000 // 60 seconds
+
+// Initialize random interval
+void set_keep_alive_delay(void) {
+    float ratio = MS_TEAMS_MIN_RATIO + (float)rand() / RAND_MAX * (1.0f - MS_TEAMS_MIN_RATIO);
+    keep_alive_delay = (uint32_t)(MS_TEAMS_DEFAULT * ratio);
+}
+
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    // Update activity timer on any (real) key press
+    if (record->event.pressed) {
+        last_activity_timer = timer_read32();
+        // Reset keep-alive interval, so it doesn't overlap with your typing
+        set_keep_alive_delay();
+        keep_alive_timer = timer_read32();
+    }
+    return true;
+}
+
+void housekeeping_task_user(void) {
+    uint32_t now = timer_read32();
+    if (now - last_activity_timer > INACTIVITY_THRESHOLD) {
+        // Inactive period detected
+        if (now - keep_alive_timer > keep_alive_delay) {
+            // Generate a "ghost" left shift press/release
+            tap_code(KC_LSFT);
+            // Set up next random delay
+            set_keep_alive_delay();
+            keep_alive_timer = timer_read32();
+        }
+    } else {
+        // If you become active, reset the keep-alive timer
+        keep_alive_timer = now;
+    }
+}
 enum custom_keycodes {
     MJ_TOGL = SAFE_RANGE,
 };
