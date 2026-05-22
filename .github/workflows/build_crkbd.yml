@@ -11,7 +11,7 @@
 #
 # WHERE TO FIND THE COMPILED FIRMWARE:
 #   GitHub → your repo → Actions tab → click the latest run → "Artifacts" section
-#   Download "crkbd-default-firmware" → unzip → flash the .hex file
+#   Download "crkbd-default-firmware" → unzip → flash the .uf2 file to your RP2040
 
 name: Build crkbd default firmware
 
@@ -20,7 +20,7 @@ on:
     branches:
       - master
     paths:
-      - 'keyboards/sofle/keymaps/default/**'
+      - 'keyboards/crkbd/keymaps/default/**'
       - '.github/workflows/build_crkbd.yml'
   workflow_dispatch:   # lets you trigger a build manually from the Actions tab
 
@@ -34,10 +34,10 @@ jobs:
         with:
           submodules: recursive   # QMK uses git submodules for libraries
 
-      - name: Install AVR toolchain
+      - name: Install ARM toolchain (for RP2040)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc-avr avr-libc binutils-avr
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
 
       - name: Install QMK CLI
         run: pip3 install qmk
@@ -45,13 +45,13 @@ jobs:
       - name: Configure QMK to use this repo
         run: qmk setup -H "$GITHUB_WORKSPACE" -y
 
-      - name: Compile sofle default keymap
-        run: qmk compile -kb sofle -km default -e MOUSEKEY_ENABLE=yes
+      - name: Compile crkbd default keymap for RP2040
+        run: qmk compile -kb crkbd/rev4_1 -km default
 
       - name: Upload firmware as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sofle-default-firmware
+          name: crkbd-default-firmware
           path: |
             *.hex
             *.uf2
