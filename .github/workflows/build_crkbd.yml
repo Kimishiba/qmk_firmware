@@ -11,7 +11,7 @@
 #
 # WHERE TO FIND THE COMPILED FIRMWARE:
 #   GitHub → your repo → Actions tab → click the latest run → "Artifacts" section
-#   Download "crkbd-default-firmware" → unzip → flash the .uf2 file to your RP2040
+#   Download "crkbd-default-firmware" → unzip → flash the .hex file
 
 name: Build crkbd default firmware
 
@@ -34,10 +34,10 @@ jobs:
         with:
           submodules: recursive   # QMK uses git submodules for libraries
 
-      - name: Install ARM toolchain (for RP2040)
+      - name: Install AVR toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+          sudo apt-get install -y gcc-avr avr-libc binutils-avr
 
       - name: Install QMK CLI
         run: pip3 install qmk
@@ -45,8 +45,8 @@ jobs:
       - name: Configure QMK to use this repo
         run: qmk setup -H "$GITHUB_WORKSPACE" -y
 
-      - name: Compile crkbd default keymap for RP2040
-        run: qmk compile -kb crkbd/rev4_1 -km default
+      - name: Compile crkbd rev1 default keymap
+        run: qmk compile -kb crkbd/rev1 -km default
 
       - name: Upload firmware as artifact
         uses: actions/upload-artifact@v4
