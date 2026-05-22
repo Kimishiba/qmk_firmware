@@ -1,0 +1,60 @@
+# GitHub Actions workflow — compiles your Sofle RP2040 default keymap
+# and makes the firmware available as a downloadable file.
+#
+# HOW TO UPLOAD THIS FILE:
+#   Path in your repo: .github/workflows/build_sofle_rp2040.yml
+#   (the .github folder already exists in your fork)
+#
+# WHEN DOES IT RUN:
+#   - Automatically whenever you push a change to the sofle default keymap
+#   - Manually at any time from the Actions tab on GitHub
+#
+# WHERE TO FIND THE COMPILED FIRMWARE:
+#   GitHub → your repo → Actions tab → click the latest run → "Artifacts" section
+#   Download "sofle-rp2040-default-firmware" → unzip → flash the .uf2 file
+
+name: Build Sofle RP2040 default firmware
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'keyboards/sofle/keymaps/default/**'
+      - 'keyboards/sofle/rules.mk'
+      - 'keyboards/sofle/config.h'
+      - '.github/workflows/build_sofle_rp2040.yml'
+  workflow_dispatch:   # lets you trigger a build manually from the Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive   # QMK uses git submodules for libraries
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y arm-none-eabi-gcc arm-none-eabi-newlib
+
+      - name: Install QMK CLI
+        run: pip3 install qmk
+
+      - name: Configure QMK to use this repo
+        run: qmk setup -H "$GITHUB_WORKSPACE" -y
+
+      - name: Compile Sofle RP2040 default keymap
+        run: qmk compile -kb sofle -km default
+
+      - name: Upload firmware as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sofle-rp2040-default-firmware
+          path: |
+            *.hex
+            *.uf2
+          if-no-files-found: error
