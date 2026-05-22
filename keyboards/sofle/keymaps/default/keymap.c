@@ -2,46 +2,29 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include QMK_KEYBOARD_H
 #include "quantum.h"
-#include <stdlib.h>
+#include "host.h"
 
 /*
- * ─── KEEP MICROSOFT TEAMS (OR SIMILAR) ACTIVE ─────────────────────────────
+ * ─── MOUSE JIGGLER (KEEP STATUS ACTIVE) ────────────────────────────────────
  *
- * This code simulates periodic keypresses to keep your Teams/Slack status
- * from going "away" due to inactivity. If you haven't typed in 60 seconds,
- * it will send a single Left Shift press/release at a pseudo-random
- * interval between 120 and 240 seconds. This is enough activity for Teams.
- *
- * - Activity is only sent if the user is otherwise inactive.
- * - Uses Left Shift (harmless in most situations).
- * - Intervals are randomized for realism (and to avoid detection).
+ * After INACTIVITY_THRESHOLD ms of no keypresses, moves the mouse +2 then -2
+ * pixels every JIGGLE_INTERVAL ms. Net movement is zero so the cursor stays
+ * in place. The OLED flashes white for 500ms when a jiggle fires.
  *
  * ────────────────────────────────────────────────────────────────────────────
  */
-#define MS_TEAMS_DEFAULT      240000   // 240 seconds (4 minutes)
-#define MS_TEAMS_MIN_RATIO    0.5      // 50% minimum interval (120 seconds)
-#define INACTIVITY_THRESHOLD  60000    // Wait 60 seconds after last real keypress
+#define JIGGLE_INTERVAL      60000   // jiggle every 60 seconds while inactive
+#define INACTIVITY_THRESHOLD 60000   // wait 60 seconds after last keypress
 
-// Timing state variables
-static uint32_t last_activity_timer = 0; // Last time you pressed a real key
-static uint32_t keep_alive_timer    = 0; // Last time fake key was sent
-static uint32_t keep_alive_delay    = 0; // Next random interval
+static uint32_t last_activity_timer = 0;
+static uint32_t jiggle_timer        = 0;
+static uint32_t jiggle_flash_timer  = 0;
 
-// Helper: pick a new random interval for the next keypress (between 120s–240s)
-void set_keep_alive_delay(void) {
-    float ratio = MS_TEAMS_MIN_RATIO + (float)rand() / RAND_MAX * (1.0f - MS_TEAMS_MIN_RATIO);
-    keep_alive_delay = (uint32_t)(MS_TEAMS_DEFAULT * ratio);
-}
-
-// Track all real keypresses to reset inactivity
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
         last_activity_timer = timer_read32();
-        set_keep_alive_delay();
-        keep_alive_timer = timer_read32();
     }
-    
-    // Custom keycode handling for navigation keys
+
     switch (keycode) {
         case KC_PRVWD:
             if (record->event.pressed) {
@@ -63,7 +46,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             }
             break;
         case KC_NXTWD:
-             if (record->event.pressed) {
+            if (record->event.pressed) {
                 if (keymap_config.swap_lctl_lgui) {
                     register_mods(mod_config(MOD_LALT));
                     register_code(KC_RIGHT);
@@ -84,7 +67,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case KC_LSTRT:
             if (record->event.pressed) {
                 if (keymap_config.swap_lctl_lgui) {
-                     //CMD-arrow on Mac, but we have CTL and GUI swapped
                     register_mods(mod_config(MOD_LCTL));
                     register_code(KC_LEFT);
                 } else {
@@ -102,7 +84,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case KC_LEND:
             if (record->event.pressed) {
                 if (keymap_config.swap_lctl_lgui) {
-                    //CMD-arrow on Mac, but we have CTL and GUI swapped
                     register_mods(mod_config(MOD_LCTL));
                     register_code(KC_RIGHT);
                 } else {
@@ -121,21 +102,36 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
-// QMK background task — checks inactivity and sends fake key if needed
 void housekeeping_task_user(void) {
     uint32_t now = timer_read32();
     if (now - last_activity_timer > INACTIVITY_THRESHOLD) {
-        // If inactive for more than 60s, check if interval has passed
-        if (now - keep_alive_timer > keep_alive_delay) {
-            tap_code(KC_LSFT); // Send harmless Left Shift tap
-            set_keep_alive_delay();
-            keep_alive_timer = timer_read32();
+        if (now - jiggle_timer > JIGGLE_INTERVAL) {
+            report_mouse_t report = {0};
+            report.x = 2;
+            host_mouse_send(&report);
+            report.x = -2;
+            host_mouse_send(&report);
+            report.x = 0;
+            host_mouse_send(&report);
+            jiggle_flash_timer = now;
+            jiggle_timer = now;
         }
     } else {
-        // If you typed, reset timer to avoid overlapping with your own activity
-        keep_alive_timer = now;
+        jiggle_timer = now;
     }
 }
+
+#ifdef OLED_ENABLE
+bool oled_task_user(void) {
+    if (jiggle_flash_timer && timer_elapsed32(jiggle_flash_timer) < 500) {
+        for (uint16_t i = 0; i < OLED_MATRIX_SIZE; i++) {
+            oled_write_raw_byte(0xFF, i);
+        }
+        return false;
+    }
+    return true;
+}
+#endif
 // ────────────────────────────────────────────────────────────────────────────
 
 enum sofle_layers {
@@ -173,7 +169,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *            |      |      |      |      |/       /         \      \ |      |      |      |      |
  *            `----------------------------------'           '------''---------------------------'
  */
-
 [_QWERTY] = LAYOUT(
   KC_GRV,   KC_1,   KC_2,    KC_3,    KC_4,    KC_5,                     KC_6,    KC_7,    KC_8,    KC_9,    KC_0,  KC_GRV,
   KC_ESC,   KC_Q,   KC_W,    KC_E,    KC_R,    KC_T,                     KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,  KC_BSPC,
@@ -196,7 +191,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *            |      |      |      |      |/       /         \      \ |      |      |      |      |
  *            `----------------------------------'           '------''---------------------------'
  */
-
 [_COLEMAK] = LAYOUT(
   KC_GRV,   KC_1,   KC_2,    KC_3,    KC_4,    KC_5,                      KC_6,    KC_7,    KC_8,    KC_9,    KC_0,  KC_GRV,
   KC_ESC,   KC_Q,   KC_W,    KC_F,    KC_P,    KC_G,                      KC_J,    KC_L,    KC_U,    KC_Y, KC_SCLN,  KC_BSPC,
@@ -210,7 +204,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
  * |  `   |   1  |   2  |   3  |   4  |   5  |                    |   6  |   7  |   8  |   9  |   0  | F12  |
  * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
- * | Tab  |   !  |   @  |   #  |   $  |   %  |-------.    ,-------|   ^  |   &  |   *  |   (  |   )  |   |  |
+ * | Tab  |   !  |   @  |   #  |   $  |   %  |-------.    ,-------|   ^  |   &  |   *  |   (  |   (  |   |  |
  * |------+------+------+------+------+------|  MUTE |    |       |------+------+------+------+------+------|
  * | Shift|  =   |  -   |  +   |   {  |   }  |-------|    |-------|   [  |   ]  |   ;  |   :  |   \  | Shift|
  * `-----------------------------------------/       /     \      \-----------------------------------------'
@@ -220,7 +214,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  */
 [_LOWER] = LAYOUT(
   _______,   KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,                       KC_F6,   KC_F7,   KC_F8,   KC_F9,  KC_F10,  KC_F11,
-  KC_GRV,    KC_1,    KC_2,    KC_3,    KC_4,    KC_5,                       KC_6,    KC_7,    KC_8,    KC_9,    KC_0,  KC_F12,
+  KC_GRV,    KC_1,    KC_2,    KC_3,    KC_4,    KC_5,                         KC_6,    KC_7,    KC_8,    KC_9,    KC_0,  KC_F12,
   _______, KC_EXLM,   KC_AT, KC_HASH,  KC_DLR, KC_PERC,                       KC_CIRC, KC_AMPR, KC_ASTR, KC_LPRN, KC_RPRN, KC_PIPE,
   _______,  KC_EQL, KC_MINS, KC_PLUS, KC_LCBR, KC_RCBR, _______,       _______, KC_LBRC, KC_RBRC, KC_SCLN, KC_COLN, KC_BSLS, _______,
                        _______, _______, _______, _______, _______,       _______, _______, _______, _______, _______
@@ -262,8 +256,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  */
   [_ADJUST] = LAYOUT(
   XXXXXXX , XXXXXXX,  XXXXXXX ,  XXXXXXX , XXXXXXX, XXXXXXX,                     XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
-  QK_BOOT  , XXXXXXX,KC_QWERTY,KC_COLEMAK,CG_TOGG,XXXXXXX,                     XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
-  XXXXXXX , XXXXXXX,CG_TOGG, XXXXXXX,    XXXXXXX,  XXXXXXX,                     XXXXXXX, KC_VOLD, KC_MUTE, KC_VOLU, XXXXXXX, XXXXXXX,
+  QK_BOOT  , XXXXXXX,KC_QWERTY,KC_COLEMAK,CG_TOGG,XXXXXXX,                      XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+  XXXXXXX , XXXXXXX,CG_TOGG, XXXXXXX,    XXXXXXX,  XXXXXXX,                      XXXXXXX, KC_VOLD, KC_MUTE, KC_VOLU, XXXXXXX, XXXXXXX,
   XXXXXXX , XXXXXXX, XXXXXXX, XXXXXXX,    XXXXXXX,  XXXXXXX, XXXXXXX,     XXXXXXX, XXXXXXX, KC_MPRV, KC_MPLY, KC_MNXT, XXXXXXX, XXXXXXX,
                    _______, _______, _______, _______, _______,     _______, _______, _______, _______, _______
   )
